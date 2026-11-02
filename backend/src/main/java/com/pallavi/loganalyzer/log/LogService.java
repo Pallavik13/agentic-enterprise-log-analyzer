@@ -7,6 +7,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Service
 public class LogService {
@@ -66,7 +67,6 @@ public class LogService {
             );
 
             LogFile logFile = new LogFile(safeFilename, content);
-
             LogFile savedLog = logFileRepository.save(logFile);
 
             return new LogUploadResponse(
@@ -83,5 +83,35 @@ public class LogService {
                     exception
             );
         }
+    }
+
+    public List<LogUploadResponse> getAllLogs() {
+
+        return logFileRepository.findAll()
+                .stream()
+                .map(log -> new LogUploadResponse(
+                        log.getId(),
+                        log.getOriginalFilename(),
+                        log.getStatus(),
+                        log.getUploadedAt()
+                ))
+                .toList();
+    }
+
+    public LogDetailsResponse getLogById(Long id) {
+
+        LogFile log = logFileRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Log file not found with ID: " + id
+                ));
+
+        return new LogDetailsResponse(
+                log.getId(),
+                log.getOriginalFilename(),
+                log.getStatus(),
+                log.getUploadedAt(),
+                log.getContent()
+        );
     }
 }
