@@ -10,6 +10,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,7 +50,8 @@ class LogServiceTest {
                         idField.setAccessible(true);
                         idField.set(log, 1L);
 
-                        var timeField = LogFile.class.getDeclaredField("uploadedAt");
+                        var timeField =
+                                LogFile.class.getDeclaredField("uploadedAt");
                         timeField.setAccessible(true);
                         timeField.set(log, Instant.now());
 
@@ -65,8 +68,7 @@ class LogServiceTest {
         assertEquals("application.log", response.filename());
         assertEquals("RECEIVED", response.status());
 
-        verify(logFileRepository, times(1))
-                .save(any(LogFile.class));
+        verify(logFileRepository).save(any(LogFile.class));
     }
 
     @Test
@@ -84,8 +86,7 @@ class LogServiceTest {
                 () -> logService.uploadLog(invalidFile)
         );
 
-        verify(logFileRepository, never())
-                .save(any(LogFile.class));
+        verify(logFileRepository, never()).save(any(LogFile.class));
     }
 
     @Test
@@ -103,7 +104,72 @@ class LogServiceTest {
                 () -> logService.uploadLog(emptyFile)
         );
 
-        verify(logFileRepository, never())
-                .save(any(LogFile.class));
+        verify(logFileRepository, never()).save(any(LogFile.class));
+    }
+
+    @Test
+    void shouldReturnAllUploadedLogs() {
+
+        LogFile first = mock(LogFile.class);
+        LogFile second = mock(LogFile.class);
+
+        when(first.getId()).thenReturn(1L);
+        when(first.getOriginalFilename()).thenReturn("app.log");
+        when(first.getStatus()).thenReturn("RECEIVED");
+        when(first.getUploadedAt()).thenReturn(Instant.now());
+
+        when(second.getId()).thenReturn(2L);
+        when(second.getOriginalFilename()).thenReturn("server.txt");
+        when(second.getStatus()).thenReturn("RECEIVED");
+        when(second.getUploadedAt()).thenReturn(Instant.now());
+
+        when(logFileRepository.findAll())
+                .thenReturn(List.of(first, second));
+
+        List<LogUploadResponse> result = logService.getAllLogs();
+
+        assertEquals(2, result.size());
+        assertEquals("app.log", result.get(0).filename());
+        assertEquals("server.txt", result.get(1).filename());
+
+        verify(logFileRepository).findAll();
+    }
+
+    @Test
+    void shouldReturnLogDetailsById() {
+
+        LogFile log = mock(LogFile.class);
+
+        when(log.getId()).thenReturn(1L);
+        when(log.getOriginalFilename()).thenReturn("application.log");
+        when(log.getStatus()).thenReturn("RECEIVED");
+        when(log.getUploadedAt()).thenReturn(Instant.now());
+        when(log.getContent()).thenReturn("ERROR: Database unavailable");
+
+        when(logFileRepository.findById(1L))
+                .thenReturn(Optional.of(log));
+
+        LogDetailsResponse result = logService.getLogById(1L);
+
+        assertEquals(1L, result.id());
+        assertEquals("application.log", result.filename());
+        assertEquals("ERROR: Database unavailable", result.content());
+
+        verify(logFileRepository).findById(1L);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenLogDoesNotExist() {
+
+        when(logFileRepository.findById(999L))
+                .thenReturn(Optional.empty());
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> logService.getLogById(999L)
+        );
+
+        assertEquals(404, exception.getStatusCode().value());
+        verify(logFileRepository).findById(999L);
     }
 }
