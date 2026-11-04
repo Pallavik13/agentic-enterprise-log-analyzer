@@ -1,3 +1,4 @@
+
 package com.pallavi.loganalyzer.log;
 
 import org.springframework.stereotype.Service;
@@ -16,8 +17,12 @@ public class LogParserService {
     );
 
     private static final Pattern LEVEL_PATTERN = Pattern.compile(
-            "\\b(ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\\b",
+            "^\\s*(ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\\b",
             Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern STACK_TRACE_PATTERN = Pattern.compile(
+            "^\\s*(?:at\\s+.+|Caused by:.*|\\.\\.\\. \\d+ more)$"
     );
 
     public LogAnalysisResponse analyze(
@@ -34,9 +39,9 @@ public class LogParserService {
         int traces = 0;
         int others = 0;
 
-       String[] lines = (content == null || content.isEmpty())
-        ? new String[0]
-        : content.split("\\R");
+        String[] lines = (content == null || content.isEmpty())
+                ? new String[0]
+                : content.split("\\R");
 
         for (int i = 0; i < lines.length; i++) {
 
@@ -62,10 +67,31 @@ public class LogParserService {
             Matcher levelMatcher =
                     LEVEL_PATTERN.matcher(remaining);
 
-            String level = "OTHER";
-            String message = line;
+            if (!levelMatcher.find()
+                    && STACK_TRACE_PATTERN.matcher(line).matches()
+                    && !entries.isEmpty()) {
 
-            if (levelMatcher.find()) {
+                LogEntryResponse previous =
+                        entries.get(entries.size() - 1);
+
+                entries.set(
+                        entries.size() - 1,
+                        new LogEntryResponse(
+                                previous.lineNumber(),
+                                previous.timestamp(),
+                                previous.level(),
+                                previous.message() + "\n" + line,
+                                previous.rawLine() + "\n" + line
+                        )
+                );
+
+                continue;
+            }
+
+            String level = "OTHER";
+            String message = remaining;
+
+            if (levelMatcher.find(0)) {
 
                 level = levelMatcher.group(1)
                         .toUpperCase(Locale.ROOT);
@@ -77,6 +103,8 @@ public class LogParserService {
                 message = remaining.substring(
                         levelMatcher.end()
                 ).replaceFirst("^\\s*[:\\-]\\s*", "").trim();
+            } else {
+                message = line;
             }
 
             switch (level) {
