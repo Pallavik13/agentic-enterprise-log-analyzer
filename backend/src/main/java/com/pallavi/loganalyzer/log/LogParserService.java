@@ -34,7 +34,9 @@ public class LogParserService {
         int traces = 0;
         int others = 0;
 
-        String[] lines = content.split("\\R");
+       String[] lines = (content == null || content.isEmpty())
+        ? new String[0]
+        : content.split("\\R");
 
         for (int i = 0; i < lines.length; i++) {
 
