@@ -1,67 +1,113 @@
 package com.pallavi.loganalyzer.log;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.List;
 
-@RestController
-@RequestMapping("/api/logs")
-public class LogController {
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-    private final LogService logService;
-    private final LogParserService logParserService;
+@WebMvcTest(LogController.class)
+class LogControllerTest {
 
-    public LogController(
-            LogService logService,
-            LogParserService logParserService) {
+    @Autowired
+    private MockMvc mockMvc;
 
-        this.logService = logService;
-        this.logParserService = logParserService;
+    @MockitoBean
+    private LogService logService;
+
+    @MockitoBean
+    private LogParserService logParserService;
+
+    @Test
+    void shouldReturnAllLogs() throws Exception {
+        when(logService.getAllLogs()).thenReturn(List.of(
+                new LogUploadResponse(
+                        1L,
+                        "application.log",
+                        "RECEIVED",
+                        Instant.parse("2026-11-02T10:00:00Z")
+                )
+        ));
+
+        mockMvc.perform(get("/api/logs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].filename")
+                        .value("application.log"));
     }
 
-    @PostMapping(
-            value = "/upload",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
-    )
-    public ResponseEntity<LogUploadResponse> uploadLog(
-            @RequestParam("file") MultipartFile file) {
-
-        LogUploadResponse response = logService.uploadLog(file);
-
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
-    }
-
-    @GetMapping
-    public ResponseEntity<List<LogUploadResponse>> getAllLogs() {
-
-        return ResponseEntity.ok(logService.getAllLogs());
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<LogDetailsResponse> getLogById(
-            @PathVariable Long id) {
-
-        return ResponseEntity.ok(logService.getLogById(id));
-    }
-
-    @GetMapping("/{id}/analysis")
-    public ResponseEntity<LogAnalysisResponse> analyzeLog(
-            @PathVariable Long id) {
-
-        LogDetailsResponse log = logService.getLogById(id);
-
-        LogAnalysisResponse analysis = logParserService.analyze(
-                log.id(),
-                log.filename(),
-                log.content()
+    @Test
+    void shouldReturnLogById() throws Exception {
+        when(logService.getLogById(1L)).thenReturn(
+                new LogDetailsResponse(
+                        1L,
+                        "application.log",
+                        "RECEIVED",
+                        Instant.parse("2026-11-02T10:00:00Z"),
+                        "ERROR: Database unavailable"
+                )
         );
 
-        return ResponseEntity.ok(analysis);
+        mockMvc.perform(get("/api/logs/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.content")
+                        .value("ERROR: Database unavailable"));
+    }
+
+    @Test
+    void shouldReturnLogAnalysis() throws Exception {
+        when(logService.getLogById(1L)).thenReturn(
+                new LogDetailsResponse(
+                        1L,
+                        "application.log",
+                        "RECEIVED",
+                        Instant.parse("2026-11-02T10:00:00Z"),
+                        "ERROR: Database unavailable"
+                )
+        );
+
+        when(logParserService.analyze(
+                1L,
+                "application.log",
+                "ERROR: Database unavailable"
+        )).thenReturn(
+                new LogAnalysisResponse(
+                        1L,
+                        "application.log",
+                        1,
+                        1,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        List.of(
+                                new LogEntryResponse(
+                                        1,
+                                        null,
+                                        "ERROR",
+                                        "Database unavailable",
+                                        "ERROR: Database unavailable"
+                                )
+                        )
+                )
+        );
+
+        mockMvc.perform(get("/api/logs/1/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.logId").value(1))
+                .andExpect(jsonPath("$.errorCount").value(1))
+                .andExpect(jsonPath("$.parsedEntries").value(1))
+                .andExpect(jsonPath("$.entries[0].level")
+                        .value("ERROR"));
     }
 }
