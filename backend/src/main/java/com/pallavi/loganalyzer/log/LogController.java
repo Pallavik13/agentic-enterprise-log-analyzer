@@ -13,9 +13,14 @@ import java.util.List;
 public class LogController {
 
     private final LogService logService;
+    private final LogParserService logParserService;
 
-    public LogController(LogService logService) {
+    public LogController(
+            LogService logService,
+            LogParserService logParserService) {
+
         this.logService = logService;
+        this.logParserService = logParserService;
     }
 
     @PostMapping(
@@ -43,5 +48,20 @@ public class LogController {
             @PathVariable Long id) {
 
         return ResponseEntity.ok(logService.getLogById(id));
+    }
+
+    @GetMapping("/{id}/analysis")
+    public ResponseEntity<LogAnalysisResponse> analyzeLog(
+            @PathVariable Long id) {
+
+        LogDetailsResponse log = logService.getLogById(id);
+
+        LogAnalysisResponse analysis = logParserService.analyze(
+                log.id(),
+                log.filename(),
+                log.content()
+        );
+
+        return ResponseEntity.ok(analysis);
     }
 }
