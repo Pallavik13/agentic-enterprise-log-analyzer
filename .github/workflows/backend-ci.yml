@@ -1,33 +1,38 @@
-name: Backend CI
+name: Application CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  backend:
     name: Build and test Spring Boot backend
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
 
-      - name: Build and run tests
-        run: mvn -B -f backend/pom.xml verify
+      - run: mvn -B -f backend/pom.xml verify
+      - run: docker compose config -q
+      - run: docker build -f backend/Dockerfile -t log-analyzer-backend:ci .
 
-      - name: Validate Docker Compose configuration
-        run: docker compose config -q
+  frontend:
+    name: Build React dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Build backend Docker image
-        run: docker build -f backend/Dockerfile -t log-analyzer-backend:ci .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install --prefix frontend
+      - run: npm run build --prefix frontend
