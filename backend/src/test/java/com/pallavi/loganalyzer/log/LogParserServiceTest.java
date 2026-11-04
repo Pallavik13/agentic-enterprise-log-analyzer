@@ -1,3 +1,4 @@
+
 package com.pallavi.loganalyzer.log;
 
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,7 @@ class LogParserServiceTest {
         assertEquals(2, result.parsedEntries());
         assertEquals(1, result.entries().get(0).lineNumber());
         assertEquals(3, result.entries().get(1).lineNumber());
+
         assertEquals(
                 "ERROR Database unavailable",
                 result.entries().get(1).rawLine()
@@ -111,6 +113,66 @@ class LogParserServiceTest {
                 "2026-11-04 10:30:45",
                 result.entries().get(0).timestamp()
         );
+
         assertEquals("ERROR", result.entries().get(0).level());
+    }
+
+    @Test
+    void shouldSupportIsoTimestampWithMillisecondsAndTimezone() {
+
+        String content =
+                "2026-11-04T10:30:45.123Z ERROR Request failed";
+
+        LogAnalysisResponse result =
+                parser.analyze(7L, "service.log", content);
+
+        assertEquals(
+                "2026-11-04T10:30:45.123Z",
+                result.entries().get(0).timestamp()
+        );
+
+        assertEquals(1, result.errorCount());
+    }
+
+    @Test
+    void shouldGroupJavaStackTraceWithPreviousError() {
+
+        String content = """
+                2026-11-04 10:30:45 ERROR Database connection failed
+                    at com.example.Database.connect(Database.java:42)
+                    at com.example.Application.start(Application.java:18)
+                Caused by: java.net.ConnectException: Connection refused
+                    ... 2 more
+                2026-11-04 10:30:46 INFO Retry scheduled
+                """;
+
+        LogAnalysisResponse result =
+                parser.analyze(8L, "application.log", content);
+
+        assertEquals(6, result.totalLines());
+        assertEquals(2, result.parsedEntries());
+        assertEquals(1, result.errorCount());
+        assertEquals(1, result.infoCount());
+        assertEquals(0, result.otherCount());
+
+        LogEntryResponse error = result.entries().get(0);
+
+        assertEquals(1, error.lineNumber());
+        assertTrue(error.message().contains("Database.java:42"));
+        assertTrue(error.message().contains("Connection refused"));
+        assertTrue(error.rawLine().contains("... 2 more"));
+    }
+
+    @Test
+    void shouldNotDetectSeverityInsideOrdinaryMessage() {
+
+        String content =
+                "The ERROR count increased during the last run";
+
+        LogAnalysisResponse result =
+                parser.analyze(9L, "custom.log", content);
+
+        assertEquals(1, result.otherCount());
+        assertEquals(0, result.errorCount());
     }
 }
